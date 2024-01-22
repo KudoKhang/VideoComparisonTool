@@ -1,15 +1,14 @@
-import cv2
 import tkinter as tk
 from tkinter import ttk
+
+import cv2
 from PIL import Image, ImageTk
 
 
 class VideoController:
-    def __init__(self, video_source=0):
+    def __init__(self, video_source):
         self.cap = cv2.VideoCapture(video_source)
-
         self.video_source = video_source
-        self.cap = cv2.VideoCapture(self.video_source)
 
         self.width, self.height = int(self.cap.get(3)), int(self.cap.get(4))
 
@@ -35,11 +34,6 @@ class VideoController:
         new_frame = current_frame - fps * seconds
         self.cap.set(cv2.CAP_PROP_POS_FRAMES, new_frame)
 
-    def toggle_sound(self):
-        current_volume = self.cap.get(cv2.CAP_PROP_VOLUME)
-        new_volume = 0.0 if current_volume > 0.0 else 1.0
-        self.cap.set(cv2.CAP_PROP_VOLUME, new_volume)
-
     def update_display(self):
         ret, frame = self.cap.read()
         if ret:
@@ -59,40 +53,66 @@ class VideoController:
         self.update_display()
 
 
-class VideoPlayerUI:
+class VideoUI:
     def __init__(self, master, video_controller):
         self.master = master
-        self.master.title("Video Player App")
+        self.master.title("Video Comparison Tool")
 
         self.video_controller = video_controller
 
-        self.canvas = tk.Canvas(self.master, width=self.video_controller.width, height=self.video_controller.height)
+        self.canvas = tk.Canvas(
+            self.master,
+            width=self.video_controller.width,
+            height=self.video_controller.height,
+        )
         self.canvas.grid(row=0, column=0, columnspan=3)
 
-        self.btn_play = ttk.Button(self.master, text="Play", command=self.video_controller.play)
-        self.btn_pause = ttk.Button(self.master, text="Pause", command=self.video_controller.pause)
-        self.btn_forward = ttk.Button(self.master, text="Forward", command=lambda: self.video_controller.forward(2))
-        self.btn_backward = ttk.Button(self.master, text="Backward", command=lambda: self.video_controller.backward(2))
-        self.btn_toggle_sound = ttk.Button(self.master, text="Toggle Sound", command=self.video_controller.toggle_sound)
+        self.create_buttons()
 
-        self.btn_play.place(x=860, y=900)
-        self.btn_pause.place(x=960, y=900)
-        self.btn_forward.place(x=100, y=100)
-        self.btn_backward.place(x=0, y=100)
-        self.btn_toggle_sound.place(x=200, y=100)
+        self.time_scale = None
+        self.create_time_scale()
 
-        self.time_scale = ttk.Scale(self.master, from_=0, to=100, orient=tk.HORIZONTAL,
-                                    length=self.video_controller.width)
-        self.time_scale.place(x=0, y=self.video_controller.height - 200)
-        self.time_scale.set(0)
+        self.zoom_in_zoom_out()
 
-        self.master.bind("<Control-MouseWheel>", self.on_mousewheel)
         self.frame_entry_label = None
         self.frame_entry = None
         self.btn_go_to_frame = None
 
-        self.create_frame_entry()
+        self.create_go_to_frame_layout()
         self.video_loop()
+
+    def create_time_scale(self):
+        self.time_scale = ttk.Scale(
+            self.master,
+            from_=0,
+            to=100,
+            orient=tk.HORIZONTAL,
+            length=self.video_controller.width,
+        )
+        self.time_scale.place(x=0, y=self.video_controller.height - 200)
+        self.time_scale.set(0)
+
+    def zoom_in_zoom_out(self):
+        self.master.bind("<Control-MouseWheel>", self.on_mousewheel)
+
+    def create_buttons(self):
+        btn_play = ttk.Button(self.master, text="Play", command=self.video_controller.play)
+        btn_pause = ttk.Button(self.master, text="Pause", command=self.video_controller.pause)
+        btn_forward = ttk.Button(
+            self.master,
+            text="Forward",
+            command=lambda: self.video_controller.forward(2),
+        )
+        btn_backward = ttk.Button(
+            self.master,
+            text="Backward",
+            command=lambda: self.video_controller.backward(2),
+        )
+
+        btn_play.place(x=860, y=900)
+        btn_pause.place(x=960, y=900)
+        btn_forward.place(x=760, y=900)
+        btn_backward.place(x=660, y=900)
 
     def on_mousewheel(self, event):
         if self.video_controller.is_playing:
@@ -108,8 +128,15 @@ class VideoPlayerUI:
         self.video_controller.update_display()
         self.canvas.create_image(0, 0, anchor=tk.NW, image=self.video_controller.photo)
         self.canvas.config(scrollregion=self.canvas.bbox(tk.ALL))
-        self.time_scale.set(int((self.video_controller.cap.get(cv2.CAP_PROP_POS_FRAMES) /
-                                 self.video_controller.cap.get(cv2.CAP_PROP_FRAME_COUNT)) * 100))
+        self.time_scale.set(
+            int(
+                (
+                    self.video_controller.cap.get(cv2.CAP_PROP_POS_FRAMES)
+                    / self.video_controller.cap.get(cv2.CAP_PROP_FRAME_COUNT)
+                )
+                * 100
+            )
+        )
 
     def video_loop(self):
         if self.video_controller.is_playing:
@@ -118,34 +145,31 @@ class VideoPlayerUI:
         else:
             self.master.after(100, self.video_loop)
 
-    def create_frame_entry(self):
+    def create_go_to_frame_layout(self):
         self.frame_entry_label = ttk.Label(self.master, text="Go to Frame:")
-        self.frame_entry_label.place(x=300, y=100)
+        self.frame_entry_label.place(x=1060, y=900)
 
         self.frame_entry = ttk.Entry(self.master)
-        self.frame_entry.place(x=380, y=100)
+        self.frame_entry.place(x=1160, y=900)
+        self.frame_entry.bind("<Return>", self.go_to_frame)
 
-        self.btn_go_to_frame = ttk.Button(self.master, text="Go", command=self.go_to_frame)
-        self.btn_go_to_frame.place(x=450, y=95)
-
-    def go_to_frame(self):
+    def go_to_frame(self, event=None):
         try:
             frame_index = int(self.frame_entry.get())
             self.video_controller.go_to_frame(frame_index)
         except ValueError:
-            # Xử lý nếu người dùng nhập không phải là số
             print("Invalid frame index input.")
 
 
-class VideoPlayerApp:
-    def __init__(self, master, video_source='data/video.mp4'):
+class VideoComparisonApp:
+    def __init__(self, master, video_source="data/video.mp4"):
         self.video_controller = VideoController(video_source)
-        self.video_player_ui = VideoPlayerUI(master, self.video_controller)
+        self.video_player_ui = VideoUI(master, self.video_controller)
 
 
 def main():
     root = tk.Tk()
-    app = VideoPlayerApp(root, video_source='data/video.mp4')
+    app = VideoComparisonApp(root, video_source="data/video.mp4")
     root.mainloop()
 
 
